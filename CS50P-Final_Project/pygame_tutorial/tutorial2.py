@@ -9,6 +9,7 @@ SCREEN_HEIGHT = 600
 
 #creo WINDOW game (posso anche mettere le dimensioni dello schermo direttamente qui dentro senza dichiarare le variabili prima)
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT)) 
+clock = pygame.time.Clock() #preparo oggetto clock con cui definirò poi FPS target
 
 #creo il PERSONAGGIO
 player = pygame.Rect((300,250,50,50))
@@ -44,5 +45,6 @@ while True:
 
     #questo servea a refreshare le info e quindi far visualizzare correttamente tutti gli elementi che renderizzo dentro la window, come ad es. il personaggio
     pygame.display.update()
+    clock.tick(60) #setto fps target (=max)
         
 pygame.quit()
