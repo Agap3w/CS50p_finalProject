@@ -183,8 +183,9 @@ class MAIN:
         self.username = self.game_manager.username  # Fetch username from GameManager
     
     def update(self):
-        self.snake.move_snake() 
-        self.check_collision_and_fail()
+        if self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
+            self.snake.move_snake()
+            self.check_collision_and_fail()
 
     def draw_elements(self):
         self.draw_grass()
@@ -196,8 +197,12 @@ class MAIN:
         head_pos = self.snake.body[0]
 
         # Check if snake collides with itself or walls
-        if not (0 <= head_pos.x < cell_number and 1 <= head_pos.y < cell_number + 1) or head_pos in self.snake.body[1:]:
-            self.game_over()
+        if head_pos in self.snake.body[1:]:
+            self.game_over(cause="collision")
+
+        # Check if snake moves out of bounds
+        elif not (0 <= head_pos.x < cell_number and 1 <= head_pos.y < cell_number + 1):
+            self.game_over(cause="fail")
 
         # If snake eats the fruit, add block and play sound
         if self.fruit.pos == head_pos:
@@ -210,11 +215,67 @@ class MAIN:
             if block == self.fruit.pos:
                 self.fruit.randomize()
     
-    def game_over(self):
+    def game_over(self, cause):
         # Save the current score using GameManager
         current_score = len(self.snake.body) - 3
         self.game_manager.insert_score(current_score)
+
+        # Display game-over animation and message
+        self.display_game_over_animation(cause)
         self.snake.reset()  # Reset the snake and game state
+
+    def display_game_over_animation(self, cause):
+        animation_start_time = pygame.time.get_ticks()
+
+        # Load images for animations
+        ambulance_img = pygame.image.load("static/ambulanza.png")
+        sheriff_img = pygame.image.load("static/sceriffo.png")
+        
+        # Initial positions for animation
+        animation_pos_x = -200  # Start off-screen
+        animation_speed = 1  # Speed of movement
+
+        # Main animation loop
+        while pygame.time.get_ticks() - animation_start_time < 5000:  # Run for 5 seconds
+            screen.fill((0, 0, 0))  # Clear screen
+
+            if cause == "collision":
+                # Move the ambulance
+                screen.blit(ambulance_img, (animation_pos_x, (cell_number+1*cell_size) // 2 - 50))
+                animation_pos_x += animation_speed
+
+                # Display collision message
+                self.display_message("Snake bit itself, game over!", (255, 0, 0))
+
+            elif cause == "fail":
+                # Move the sheriff car
+                screen.blit(sheriff_img, (animation_pos_x, (cell_number+1*cell_size) // 2 - 50))
+                animation_pos_x += animation_speed
+
+                # Display out-of-bounds message
+                self.display_message("Snake out of playground, game over!", (255, 165, 0))
+
+            pygame.display.flip()
+            pygame.time.delay(20)
+
+        # Wait for user input or timeout
+        self.wait_for_user_input_or_timeout()
+
+    def display_message(self, message, color):
+        font = pygame.font.Font(None, 50)  # Choose font and size
+        text_surface = font.render(message, True, color)
+        text_rect = text_surface.get_rect(center=((cell_number*cell_size) // 2, (cell_number+1*cell_size) // 2 + 100))
+        screen.blit(text_surface, text_rect)
+
+    def wait_for_user_input_or_timeout(self):
+        start_time = pygame.time.get_ticks()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or event.type == pygame.KEYDOWN:
+                    return
+            if pygame.time.get_ticks() - start_time > 5000:  # 5 seconds timeout
+                return
+
 
     def draw_grass(self):
         grass_colour = (135,170,60)
@@ -239,7 +300,7 @@ class MAIN:
         # Draw the score text
         score_text = str(len(self.snake.body) - 3)  # Calculate score
         score_surface = game_font.render(score_text, True, (0, 0, 0)    )  # Black text
-        score_x = cell_size * (cell_number / 2)  # 2 cells away from the right edge
+        score_x = cell_size * (cell_number // 2)  # 2 cells away from the right edge
         score_y = cell_size // 2  # Center vertically within the row
         score_rect = score_surface.get_rect(midright=(score_x, score_y))
         screen.blit(score_surface, score_rect)  # Draw the score
