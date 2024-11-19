@@ -1,58 +1,60 @@
 import pygame, sys, random, sqlite3
 from pygame.math import Vector2 
 
-# Function to prompt for username
-def get_username():
-    username = ""  # Initialize username as an empty string
-    active = True  # Whether the input box is active
+# GameManager
+class GameManager:
+    def __init__(self):
+        self.username = self.get_username()
 
-    input_box = pygame.Rect(100, 200, 400, 50)  # Input box dimensions
-    font = pygame.font.Font(None, 32)  # Font for the username
-    color_inactive = pygame.Color('lightskyblue3')  # Box color (inactive)
-    color_active = pygame.Color('dodgerblue2')  # Box color (active)
-    color = color_inactive
+    def get_username(self):
+        username = ""  # Initialize username as an empty string
+        active = True  # Whether the input box is active
+        input_box = pygame.Rect(100, 200, 400, 50)
+        font = pygame.font.Font(None, 32)
+        color_inactive = pygame.Color('lightskyblue3')
+        color_active = pygame.Color('dodgerblue2')
+        color = color_inactive
 
-    while active:
-        screen.fill((30, 30, 30))  # Background color for the prompt
+        while active:
+            screen.fill((30, 30, 30))  # Background color for the prompt
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:  # Press Enter to confirm
-                    active = False  # Exit the input loop
-                elif event.key == pygame.K_BACKSPACE:  # Remove last character
-                    username = username[:-1]
-                else:
-                    username += event.unicode  # Add typed character to username
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:  # Press Enter to confirm
+                        active = False  # Exit the input loop
+                    elif event.key == pygame.K_BACKSPACE:  # Remove last character
+                        username = username[:-1]
+                    else:
+                        username += event.unicode  # Add typed character to username
 
-        # Draw the input box
-        pygame.draw.rect(screen, color, input_box, 2)
-        text_surface = font.render(username, True, pygame.Color('white'))
-        screen.blit(text_surface, (input_box.x + 10, input_box.y + 10))
-        input_box.w = max(400, text_surface.get_width() + 20)  # Adjust width dynamically
+            pygame.draw.rect(screen, color, input_box, 2)
+            text_surface = font.render(username.upper(), True, pygame.Color('white'))
+            screen.blit(text_surface, (input_box.x + 10, input_box.y + 10))
+            input_box.w = max(400, text_surface.get_width() + 20)  # Adjust width dynamically
 
-        # Display prompt text
-        prompt_surface = font.render("Enter your username and press Enter:", True, pygame.Color('white'))
-        screen.blit(prompt_surface, (100, 150))
+            prompt_surface = font.render("Enter your name and press \"Enter\"", True, pygame.Color('white'))
+            screen.blit(prompt_surface, (100, 150))
+            pygame.display.flip()
+            clock.tick(30)  # Limit frame rate
 
-        pygame.display.flip()
-        clock.tick(30)  # Limit frame rate
+        return username.upper()
 
-    return username
+    def insert_score(self, score):
+        with sqlite3.connect('snake.db') as db:
+            db.execute('INSERT INTO scores (username, score) VALUES (?, ?)', (self.username, score))
 
-def insert_score(username, score):
-    with sqlite3.connect('snake.db') as db:
-        db.execute('INSERT INTO scores (username, score) VALUES (?, ?)', (username, score))
-
-def get_high_score(username):
-    with sqlite3.connect('snake.db') as db:
-        cursor = db.cursor()
-        cursor.execute('SELECT MAX(score) FROM scores WHERE username = ?', (username,))
-        high_score = cursor.fetchone()[0]
-    return high_score if high_score is not None else 0
+    def get_high_scores(self, limit=5):
+        with sqlite3.connect('snake.db') as db:
+            cursor = db.cursor()
+            cursor.execute(
+                'SELECT username, MAX(score) as best_score FROM scores GROUP BY username ORDER BY best_score DESC LIMIT ?',
+                (limit,)
+            )
+            return cursor.fetchall()
 
 #il serpente
 class SNAKE: 
@@ -172,12 +174,13 @@ class FRUIT:
         self.y = random.randint(1,cell_number)
         self.pos = Vector2(self.x, self.y)
 
-#MAIN (include serpente + frutta + background + dinamiche di gioco come collisione e game_over)        
+#MAIN (include GameManagerserpente + frutta + background + dinamiche di gioco come collisione e game_over)        
 class MAIN:
-    def __init__(self):
+    def __init__(self, game_manager):
         self.snake = SNAKE()
         self.fruit = FRUIT()
-        self.username = get_username()  # Ask for the username
+        self.game_manager = game_manager  # Store reference to the game manager
+        self.username = self.game_manager.username  # Fetch username from GameManager
     
     def update(self):
         self.snake.move_snake() 
@@ -187,7 +190,7 @@ class MAIN:
         self.draw_grass()
         self.fruit.draw_fruit() 
         self.snake.draw_snake()
-        self.draw_score() 
+        self.draw_titanPanel() 
 
     def check_collision_and_fail(self):
         head_pos = self.snake.body[0]
@@ -208,6 +211,9 @@ class MAIN:
                 self.fruit.randomize()
     
     def game_over(self):
+        # Save the current score using GameManager
+        current_score = len(self.snake.body) - 3
+        self.game_manager.insert_score(current_score)
         self.snake.reset()  # Reset the snake and game state
 
     def draw_grass(self):
@@ -224,35 +230,64 @@ class MAIN:
                         grass_rect = pygame.Rect(col*cell_size, row*cell_size, cell_size, cell_size) 
                         pygame.draw.rect(screen, grass_colour, grass_rect)
 
-    def draw_score(self):
-        # Calculate the dimensions and position of the score frame
-        score_frame_rect = pygame.Rect(0, 0, cell_size * cell_number, cell_size)  # Top row (20 cells wide)
-        
-        # Draw the background of the score frame
-        pygame.draw.rect(screen, (200, 200, 200), score_frame_rect)  # Greenish background
-        pygame.draw.rect(screen, (90, 90, 90), score_frame_rect, 2)  # Grey border (2-pixel thick)
+    def draw_titanPanel(self):
+        # Draw score bar
+        panel_frame_rect = pygame.Rect(0, 0, cell_size * cell_number, cell_size)  # Top row (20 cells wide)
+        pygame.draw.rect(screen, (200, 200, 200), panel_frame_rect)  # Greenish background
+        pygame.draw.rect(screen, (90, 90, 90), panel_frame_rect, 2)  # Grey border (2-pixel thick)
 
-        # Render the score text
+        # Draw the score text
         score_text = str(len(self.snake.body) - 3)  # Calculate score
-        score_surface = game_font.render(score_text, True, (0, 0, 0))  # Black text
-
-        # Position the score text in the frame
-        score_x = cell_size * (cell_number - 2)  # 2 cells away from the right edge
+        score_surface = game_font.render(score_text, True, (0, 0, 0)    )  # Black text
+        score_x = cell_size * (cell_number / 2)  # 2 cells away from the right edge
         score_y = cell_size // 2  # Center vertically within the row
         score_rect = score_surface.get_rect(midright=(score_x, score_y))
+        screen.blit(score_surface, score_rect)  # Draw the score
 
-        # Position the apple icon next to the score
+        # Draw the apple
         apple_rect = apple.get_rect(midright=(score_rect.left - 10, score_rect.centery))  # 10px gap to the left of the score
+        screen.blit(apple, apple_rect)  # Draw the apple icon
 
-        # You can now display the username here if needed, e.g., at the top
+        # Draw the username
         username_surface = game_font.render(f"{self.username}", True, (0, 0, 0))
         screen.blit(username_surface, (50, 10))  # Display username at top-left
 
-        # Blit the elements onto the screen
-        screen.blit(score_surface, score_rect)  # Draw the score
-        screen.blit(apple, apple_rect)  # Draw the apple icon
+        # Draw the trophy
+        trophy_rect = trophy.get_rect(midright=(panel_frame_rect.right - 40, score_rect.centery))  # 10px gap to the left of the score
+        screen.blit(trophy, trophy_rect)
+        self.trophy_button_rect = trophy_rect  # Add click detection for the trophy button
+        
+    def show_high_scores(self):
+        popup_width = cell_size * 10
+        popup_height = cell_size * 10
+        popup_surface = pygame.Surface((popup_width, popup_height))
+        popup_surface.fill((50, 50, 50))  # Dark gray background
+        pygame.draw.rect(popup_surface, (200, 200, 200), popup_surface.get_rect(), 2)
 
+        high_scores = self.game_manager.get_high_scores()  # Fetch from GameManager
 
+        font = pygame.font.Font(None, 28)
+        title_surface = font.render("Top Scores", True, (255, 255, 255))
+        popup_surface.blit(title_surface, (popup_width // 2 - title_surface.get_width() // 2, 20))
+
+        y_offset = 60
+        for idx, (user, score) in enumerate(high_scores, start=1):
+            score_text = f"{idx}. {user}: {score}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            popup_surface.blit(score_surface, (20, y_offset))
+            y_offset += 40
+
+        screen.blit(popup_surface, (cell_size * 5, cell_size * 5))
+        pygame.display.update()
+
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type in {pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN}:
+                    waiting = False
 
 pygame.init()
 
@@ -262,12 +297,14 @@ cell_number = 20
 screen = pygame.display.set_mode((cell_number*cell_size, (cell_number+1)*cell_size)) 
 clock = pygame.time.Clock()
 apple = pygame.image.load("static/apple.png").convert_alpha()
+trophy = pygame.image.load("static/coppa.png").convert_alpha()
 game_font = pygame.font.Font(None, 25) #ARG = (font, fontsize). Come font posso usare 'None' oppure uploadare un '../static/font.ttf'
 
 SCREEN_UPDATE = pygame.USEREVENT
 pygame.time.set_timer(SCREEN_UPDATE, 150)
 
-main_game = MAIN() 
+game_manager = GameManager()  # Initialize GameManager
+main_game = MAIN(game_manager)  # Pass GameManager to MAIN
 
 #game loop con quit option, screen_update e keybindings. background and draw elements
 while True:
@@ -275,6 +312,11 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left mouse button
+                if main_game.trophy_button_rect.collidepoint(event.pos):
+                    main_game.show_high_scores()
  
         if event.type == SCREEN_UPDATE:
             main_game.update() 
