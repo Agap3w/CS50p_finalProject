@@ -161,7 +161,7 @@ class SNAKE:
 class FRUIT:
     def __init__(self):
         self.x = random.randint(0,cell_number-1)
-        self.y = random.randint(0,cell_number-1)
+        self.y = random.randint(1,cell_number+1)
         self.pos = Vector2(self.x, self.y)
     
     
@@ -181,9 +181,17 @@ class MAIN:
         self.fruit = FRUIT()
         self.game_manager = game_manager  # Store reference to the game manager
         self.username = self.game_manager.username  # Fetch username from GameManager
+
+        # Initialize animation-related attributes
+        self.animation_active = False
+        self.animation_start_time = 0
+        self.animation_pos_x = -200  # Start off-screen
+        self.animation_pos_y = (cell_number * cell_size + cell_size) // 2 - 50  # Centered Y position
+        self.animation_speed = 6  # Adjust speed
+        self.animation_cause = None  # Store cause
     
     def update(self):
-        if self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
+        if not self.animation_active and self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
             self.snake.move_snake()
             self.check_collision_and_fail()
 
@@ -221,45 +229,46 @@ class MAIN:
         self.game_manager.insert_score(current_score)
 
         # Display game-over animation and message
-        self.display_game_over_animation(cause)
+        self.start_animation(cause)
         self.snake.reset()  # Reset the snake and game state
 
-    def display_game_over_animation(self, cause):
-        animation_start_time = pygame.time.get_ticks()
+    def start_animation(self, cause):
+        self.animation_active = True
+        self.animation_pos_x = -200  # Start off-screen
+        self.animation_start_time = pygame.time.get_ticks()  # Get current time for animation duration
+        self.animation_cause = cause  # Set the cause of the animation (e.g., "collision" or "fail")
 
-        # Load images for animations
-        ambulance_img = pygame.image.load("static/ambulanza.png")
-        sheriff_img = pygame.image.load("static/sceriffo.png")
-        
-        # Initial positions for animation
-        animation_pos_x = -200  # Start off-screen
-        animation_speed = 1  # Speed of movement
 
-        # Main animation loop
-        while pygame.time.get_ticks() - animation_start_time < 5000:  # Run for 5 seconds
-            screen.fill((0, 0, 0))  # Clear screen
+    def update_animation(self):
+        if self.animation_active:
+            # Check if any key is pressed during the animation
+            if (pygame.key.get_pressed()[pygame.K_SPACE]):
+                self.animation_active = False  # Stop the animation
+                self.snake.reset()  # Reset the snake immediately after the animation stops
+                return
 
-            if cause == "collision":
-                # Move the ambulance
-                screen.blit(ambulance_img, (animation_pos_x, (cell_number+1*cell_size) // 2 - 50))
-                animation_pos_x += animation_speed
+            elapsed_time = pygame.time.get_ticks() - self.animation_start_time
+            if elapsed_time > 5000:  # Stop animation after 5 seconds
+                self.animation_active = False
+                self.snake.reset()  # Reset the snake after animation
 
-                # Display collision message
-                self.display_message("Snake bit itself, game over!", (255, 0, 0))
+            screen.fill((0, 0, 0))  # Clear the screen
 
-            elif cause == "fail":
-                # Move the sheriff car
-                screen.blit(sheriff_img, (animation_pos_x, (cell_number+1*cell_size) // 2 - 50))
-                animation_pos_x += animation_speed
+            # Center position in the X-axis
+            center_x = (cell_number * cell_size) // 3
 
-                # Display out-of-bounds message
-                self.display_message("Snake out of playground, game over!", (255, 165, 0))
+            if self.animation_pos_x < center_x:  # Only move if the animation hasn't reached center
+                self.animation_pos_x += self.animation_speed
+            else:
+                self.animation_pos_x = center_x  # Stop at the center
 
-            pygame.display.flip()
-            pygame.time.delay(20)
+            if self.animation_cause == "collision":
+                screen.blit(pygame.image.load("static/ambulanza.png"), (self.animation_pos_x, (cell_number+1)*cell_size//2 - 50))
+                self.display_message("Ahia che male! AMBULANZA!", (255, 0, 0))
+            elif self.animation_cause == "fail":
+                screen.blit(pygame.image.load("static/sceriffo.png"), (self.animation_pos_x, (cell_number+1)*cell_size//2 - 50))
+                self.display_message("Il serpente è scappato! SCERIFFO!", (255, 165, 0))
 
-        # Wait for user input or timeout
-        self.wait_for_user_input_or_timeout()
 
     def display_message(self, message, color):
         font = pygame.font.Font(None, 50)  # Choose font and size
@@ -367,8 +376,15 @@ pygame.time.set_timer(SCREEN_UPDATE, 150)
 game_manager = GameManager()  # Initialize GameManager
 main_game = MAIN(game_manager)  # Pass GameManager to MAIN
 
+# Variable to track the time of the last input
+last_input_time = 0
+input_delay = 80  # 80 milliseconds delay between key presses
+
 #game loop con quit option, screen_update e keybindings. background and draw elements
 while True:
+
+    current_time = pygame.time.get_ticks()  # Get current time in milliseconds
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -380,19 +396,23 @@ while True:
                     main_game.show_high_scores()
  
         if event.type == SCREEN_UPDATE:
-            main_game.update() 
+            main_game.update()
 
-        if event.type == pygame.KEYDOWN: 
-            if event.key == pygame.K_UP and main_game.snake.direction.y != 1: 
-                main_game.snake.direction = Vector2(0,-1) 
-            if event.key == pygame.K_DOWN and main_game.snake.direction.y != -1: 
-                main_game.snake.direction = Vector2(0,1)
-            if event.key == pygame.K_LEFT and main_game.snake.direction.x != 1: 
-                main_game.snake.direction = Vector2(-1,0)
-            if event.key == pygame.K_RIGHT and main_game.snake.direction.x != -1: 
-                main_game.snake.direction = Vector2(1,0)
+        if event.type == pygame.KEYDOWN:
+            if current_time - last_input_time >= input_delay: # Only process input if enough time has passed since the last key press
+                if event.key == pygame.K_UP and main_game.snake.direction.y != 1: 
+                    main_game.snake.direction = Vector2(0,-1) 
+                elif event.key == pygame.K_DOWN and main_game.snake.direction.y != -1: 
+                    main_game.snake.direction = Vector2(0,1)
+                elif event.key == pygame.K_LEFT and main_game.snake.direction.x != 1 and main_game.snake.direction != Vector2(0, 0):  # Can't move left if already moving right or if no direction
+                    main_game.snake.direction = Vector2(-1, 0)
+                elif event.key == pygame.K_RIGHT and main_game.snake.direction.x != -1: 
+                    main_game.snake.direction = Vector2(1,0)
+                # Update the last input time after processing the key press
+                last_input_time = current_time
 
     screen.fill((145,182,63)) 
     main_game.draw_elements()
+    main_game.update_animation()  # Run animation alongside other game elements
     pygame.display.update()
     clock.tick(60)
