@@ -47,6 +47,15 @@ class GameManager:
         with sqlite3.connect('snake.db') as db:
             db.execute('INSERT INTO scores (username, score) VALUES (?, ?)', (self.username, score))
 
+    #prendo dato record utente corrente
+    def get_high_score(self):
+        with sqlite3.connect('snake.db') as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT MAX(score) FROM scores WHERE username = ?", (self.username,))
+            result = cursor.fetchone()
+            return result[0] if result[0] else 0
+
+    # prendo dati per hall of fame
     def get_high_scores(self, limit=5):
         with sqlite3.connect('snake.db') as db:
             cursor = db.cursor()
@@ -55,6 +64,13 @@ class GameManager:
                 (limit,)
             )
             return cursor.fetchall()
+    
+    def get_previous_best_score(self):
+        with sqlite3.connect('snake.db') as db:
+            cursor = db.cursor()
+            cursor.execute('SELECT MAX(score) FROM scores WHERE username = ?', (self.username,))
+            result = cursor.fetchone()
+            return result[0] if result and result[0] else 0
 
 #il serpente
 class SNAKE: 
@@ -161,7 +177,7 @@ class SNAKE:
 class FRUIT:
     def __init__(self):
         self.x = random.randint(0,cell_number-1)
-        self.y = random.randint(1,cell_number+1)
+        self.y = random.randint(1,cell_number)
         self.pos = Vector2(self.x, self.y)
     
     
@@ -182,6 +198,13 @@ class MAIN:
         self.game_manager = game_manager  # Store reference to the game manager
         self.username = self.game_manager.username  # Fetch username from GameManager
 
+        #initialize record-related attributes
+        self.previous_best = self.game_manager.get_previous_best_score()  # Fetch player's best score
+        self.new_record = False  # Track if a new record is in progress
+        self.record_start_time = None  # Track when record notification starts
+        self.record_sound = pygame.mixer.Sound("static/saetta.wav")  # Audio for new record
+        self.record_sound_played = False  # New flag to track sound playback
+
         # Initialize animation-related attributes
         self.animation_active = False
         self.animation_start_time = 0
@@ -189,6 +212,9 @@ class MAIN:
         self.animation_pos_y = (cell_number * cell_size + cell_size) // 2 - 50  # Centered Y position
         self.animation_speed = 6  # Adjust speed
         self.animation_cause = None  # Store cause
+
+        
+        self.animation_sound = pygame.mixer.Sound("static/sirena.wav")  # Add sound effect for ambulance and sheriff animations
     
     def update(self):
         if not self.animation_active and self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
@@ -217,16 +243,40 @@ class MAIN:
             self.fruit.randomize()
             self.snake.add_block()
             self.snake.play_crunch_sound()
+        
+        # Check for new record
+        current_score = len(self.snake.body) - 3
+        if current_score > self.previous_best:  # Check if it's a new record
+            if not self.record_sound_played:  # Play the sound only once
+                self.record_sound.play()
+                self.record_sound_played = True  # Prevent replaying during the same session
+            self.new_record = True  # Indicate a new record is in progress
+            self.record_start_time = pygame.time.get_ticks()  # Save the start time for the record animation
+        else:
+            self.new_record = False  # Reset if not a new record
+            self.record_start_time = None
 
         #se frutta respawna su serpente, ripeto respawn
         for block in self.snake.body[1:]:
             if block == self.fruit.pos:
                 self.fruit.randomize()
     
+    def get_high_score(self):
+    #Fetch the current high score from the database.
+        return self.game_manager.get_high_score()
+
     def game_over(self, cause):
         # Save the current score using GameManager
         current_score = len(self.snake.body) - 3
         self.game_manager.insert_score(current_score)
+
+        # Update the previous_best dynamically after inserting the new score
+        self.previous_best = self.game_manager.get_previous_best_score()    
+
+        # Reset record-related attributes
+        self.record_sound_played = False
+        self.new_record = False  # Reset record flag
+        self.record_start_time = None  # Reset record timing
 
         # Display game-over animation and message
         self.start_animation(cause)
@@ -237,7 +287,7 @@ class MAIN:
         self.animation_pos_x = -200  # Start off-screen
         self.animation_start_time = pygame.time.get_ticks()  # Get current time for animation duration
         self.animation_cause = cause  # Set the cause of the animation (e.g., "collision" or "fail")
-
+        self.animation_sound.play() # Play the sound when animation starts
 
     def update_animation(self):
         if self.animation_active:
@@ -252,7 +302,7 @@ class MAIN:
                 self.animation_active = False
                 self.snake.reset()  # Reset the snake after animation
 
-            screen.fill((0, 0, 0))  # Clear the screen
+            screen.fill((50, 50, 50))  # Clear the screen
 
             # Center position in the X-axis
             center_x = (cell_number * cell_size) // 3
@@ -264,11 +314,10 @@ class MAIN:
 
             if self.animation_cause == "collision":
                 screen.blit(pygame.image.load("static/ambulanza.png"), (self.animation_pos_x, (cell_number+1)*cell_size//2 - 50))
-                self.display_message("Ahia che male! AMBULANZA!", (255, 0, 0))
+                self.display_message("Ahia che male! AMBULANZA!", (255, 165, 0))
             elif self.animation_cause == "fail":
                 screen.blit(pygame.image.load("static/sceriffo.png"), (self.animation_pos_x, (cell_number+1)*cell_size//2 - 50))
                 self.display_message("Il serpente è scappato! SCERIFFO!", (255, 165, 0))
-
 
     def display_message(self, message, color):
         font = pygame.font.Font(None, 50)  # Choose font and size
@@ -284,7 +333,6 @@ class MAIN:
                     return
             if pygame.time.get_ticks() - start_time > 5000:  # 5 seconds timeout
                 return
-
 
     def draw_grass(self):
         grass_colour = (135,170,60)
@@ -303,30 +351,46 @@ class MAIN:
     def draw_titanPanel(self):
         # Draw score bar
         panel_frame_rect = pygame.Rect(0, 0, cell_size * cell_number, cell_size)  # Top row (20 cells wide)
-        pygame.draw.rect(screen, (200, 200, 200), panel_frame_rect)  # Greenish background
         pygame.draw.rect(screen, (90, 90, 90), panel_frame_rect, 2)  # Grey border (2-pixel thick)
 
-        # Draw the score text
-        score_text = str(len(self.snake.body) - 3)  # Calculate score
-        score_surface = game_font.render(score_text, True, (0, 0, 0)    )  # Black text
-        score_x = cell_size * (cell_number // 2)  # 2 cells away from the right edge
-        score_y = cell_size // 2  # Center vertically within the row
-        score_rect = score_surface.get_rect(midright=(score_x, score_y))
-        screen.blit(score_surface, score_rect)  # Draw the score
+        current_score = len(self.snake.body) - 3  # Calculate current score
+        high_score = self.get_high_score()  # Always fetch the latest high score
 
-        # Draw the apple
-        apple_rect = apple.get_rect(midright=(score_rect.left - 10, score_rect.centery))  # 10px gap to the left of the score
-        screen.blit(apple, apple_rect)  # Draw the apple icon
+        if current_score > high_score:
+            # New record is in progress
+            if not self.new_record:
+                self.new_record = True  # Set new record flag 
 
-        # Draw the username
-        username_surface = game_font.render(f"{self.username}", True, (0, 0, 0))
-        screen.blit(username_surface, (50, 10))  # Display username at top-left
+            pygame.draw.rect(screen, (255, 0, 0), panel_frame_rect)  # Red Titan Panel
 
-        # Draw the trophy
-        trophy_rect = trophy.get_rect(midright=(panel_frame_rect.right - 40, score_rect.centery))  # 10px gap to the left of the score
-        screen.blit(trophy, trophy_rect)
-        self.trophy_button_rect = trophy_rect  # Add click detection for the trophy button
-        
+            # Draw the "NEW RECORD IN PROGRESS" message
+            record_surface = game_font.render(f"NEW RECORD IN PROGRESS: {current_score}", True, (255, 255, 255))
+            screen.blit(record_surface, (panel_frame_rect.centerx - record_surface.get_width() // 2, 10))
+            
+
+        else:
+            pygame.draw.rect(screen, (200, 200, 200), panel_frame_rect)  # Default gray Titan Panel
+
+            # Draw the score text
+            score_surface = game_font.render(str(current_score), True, (0, 0, 0))  # Black text
+            score_x = cell_size * (cell_number // 2)  # Centered score
+            score_y = cell_size // 2  # Vertically centered
+            score_rect = score_surface.get_rect(midright=(score_x, score_y))
+            screen.blit(score_surface, score_rect)  # Draw the score
+
+            # Draw the apple icon
+            apple_rect = apple.get_rect(midright=(score_rect.left - 10, score_rect.centery))  # 10px gap to the left of the score
+            screen.blit(apple, apple_rect)  # Draw the apple icon
+
+            # Draw the username
+            username_surface = game_font.render(f"{self.username}", True, (0, 0, 0))
+            screen.blit(username_surface, (50, 10))  # Display username at top-left
+
+            # Draw the trophy icon
+            trophy_rect = trophy.get_rect(midright=(panel_frame_rect.right - 40, score_rect.centery))  # 10px gap
+            screen.blit(trophy, trophy_rect)
+            self.trophy_button_rect = trophy_rect  # Add click detection for trophy
+
     def show_high_scores(self):
         popup_width = cell_size * 10
         popup_height = cell_size * 10
@@ -337,12 +401,14 @@ class MAIN:
         high_scores = self.game_manager.get_high_scores()  # Fetch from GameManager
 
         font = pygame.font.Font(None, 28)
-        title_surface = font.render("Top Scores", True, (255, 255, 255))
+        title_surface = font.render("I più bravi:", True, (255, 255, 255))
         popup_surface.blit(title_surface, (popup_width // 2 - title_surface.get_width() // 2, 20))
 
         y_offset = 60
-        for idx, (user, score) in enumerate(high_scores, start=1):
-            score_text = f"{idx}. {user}: {score}"
+        y_offset += 20  # Add extra space (this is the newline effect)
+
+        for _, (user, score) in enumerate(high_scores):  # Ignore the index by using `_`
+            score_text = f"{user}: {score}"  # Remove the number before the user
             score_surface = font.render(score_text, True, (255, 255, 255))
             popup_surface.blit(score_surface, (20, y_offset))
             y_offset += 40
