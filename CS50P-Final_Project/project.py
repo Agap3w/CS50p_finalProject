@@ -12,6 +12,96 @@ def extract_hall_of_fame():
         cursor.execute("SELECT username, MAX(score) as best_score FROM scores GROUP BY username ORDER BY best_score DESC LIMIT ?", (5,))
         return cursor.fetchall()
 
+def get_username_and_mode():
+    username = ""  # Initialize username as an empty string
+    mode = ""      # Initialize mode as an empty string
+    font = pygame.font.Font(None, 32)
+
+    # Colors
+    color_inactive = pygame.Color('lightskyblue3')
+    color_active = pygame.Color('dodgerblue2')
+    color_hover = pygame.Color('skyblue')
+    color_text = pygame.Color('white')
+    color_selected = pygame.Color('green')  # Color to highlight the selected mode
+
+    input_box = pygame.Rect(200, 150, 400, 50)  # Position for username input box
+    easy_box = pygame.Rect(250, 320, 100, 50)  # Position for "EASY" box
+    hard_box = pygame.Rect(450, 320, 100, 50)  # Position for "HARD" box
+    submit_box = pygame.Rect(350, 500, 100, 50)  # Position for submit button
+
+    while True:  # Continue until username and mode are both set
+        screen.fill((30, 30, 30))  # Background color for the prompt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            # Handle username input
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN and username != "":  # Confirm username on Enter
+                    # Don't lock username right after pressing Enter
+                    pass
+                elif event.key == pygame.K_BACKSPACE:  # Remove last character
+                    username = username[:-1]
+                else:
+                    username += event.unicode  # Add typed character to username
+
+            # Handle mode selection
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if easy_box.collidepoint(event.pos):
+                    # Toggle mode if already selected
+                    if mode == "EASY":
+                        mode = ""  # Unselect mode if clicked again
+                    else:
+                        mode = "EASY"
+                elif hard_box.collidepoint(event.pos):
+                    # Toggle mode if already selected
+                    if mode == "HARD":
+                        mode = ""  # Unselect mode if clicked again
+                    else:
+                        mode = "HARD"
+
+            # Handle submit button
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if submit_box.collidepoint(event.pos) and username != "" and mode != "":
+                    return username.upper(), mode  # Submit inputs when button is clicked
+
+        # Draw the username input box
+        pygame.draw.rect(screen, color_active if username else color_inactive, input_box, 2)
+        text_surface = font.render(username.upper(), True, color_text)
+        screen.blit(text_surface, (input_box.x + 10, input_box.y + 10))
+        input_box.w = max(400, text_surface.get_width() + 20)  # Adjust width dynamically
+
+        # Draw the mode selection buttons with highlighting
+        easy_color = color_selected if mode == "EASY" else (color_hover if easy_box.collidepoint(pygame.mouse.get_pos()) else color_inactive)
+        hard_color = color_selected if mode == "HARD" else (color_hover if hard_box.collidepoint(pygame.mouse.get_pos()) else color_inactive)
+
+        pygame.draw.rect(screen, easy_color, easy_box)
+        pygame.draw.rect(screen, hard_color, hard_box)
+
+        # Add text to each mode button
+        easy_text = font.render("Facile", True, color_text)
+        hard_text = font.render("Normale", True, color_text)
+        screen.blit(easy_text, (easy_box.x + (easy_box.width - easy_text.get_width()) // 2, easy_box.y + (easy_box.height - easy_text.get_height()) // 2))
+        screen.blit(hard_text, (hard_box.x + (hard_box.width - hard_text.get_width()) // 2, hard_box.y + (hard_box.height - hard_text.get_height()) // 2))
+
+        # Draw the submit button
+        pygame.draw.rect(screen, (100, 20, 0), submit_box)
+        submit_text = font.render("Invio", True, color_text)
+        screen.blit(submit_text, (submit_box.x + (submit_box.width - submit_text.get_width()) // 2, submit_box.y + (submit_box.height - submit_text.get_height()) // 2))
+
+        # Display prompts (titles) - These titles stay visible even after choices
+        prompt_surface = font.render("Username:", True, color_text)
+        screen.blit(prompt_surface, (200, 100))
+
+        # Always show the mode prompt
+        prompt_surface = font.render("Difficoltà:", True, color_text)
+        screen.blit(prompt_surface, (200, 270))
+
+        pygame.display.flip()
+        clock.tick(30)  # Limit frame rate
+
 class Config:
     CELL_SIZE = 40
     CELL_NUMBER = 20
@@ -140,7 +230,7 @@ class GAME:
     def __init__(self):
         self.snake = SNAKE()
         self.fruit = FRUIT()
-        self.username, self.mode = self.get_username_and_mode()
+        self.username, self.mode = get_username_and_mode()
         self.trophy = pygame.image.load("static/coppa.png").convert_alpha()
         
         self.last_move_time = 0  # Time when the snake last moved
@@ -165,96 +255,6 @@ class GAME:
         self.animation_cause = None  # Store cause
         self.animation_sound = pygame.mixer.Sound("static/sirena.wav")  # Add sound effect for ambulance and sheriff animations
     
-    def get_username_and_mode(self):
-        username = ""  # Initialize username as an empty string
-        mode = ""      # Initialize mode as an empty string
-        font = pygame.font.Font(None, 32)
-
-        # Colors
-        color_inactive = pygame.Color('lightskyblue3')
-        color_active = pygame.Color('dodgerblue2')
-        color_hover = pygame.Color('skyblue')
-        color_text = pygame.Color('white')
-        color_selected = pygame.Color('green')  # Color to highlight the selected mode
-
-        input_box = pygame.Rect(200, 150, 400, 50)  # Position for username input box
-        easy_box = pygame.Rect(250, 320, 100, 50)  # Position for "EASY" box
-        hard_box = pygame.Rect(450, 320, 100, 50)  # Position for "HARD" box
-        submit_box = pygame.Rect(350, 500, 100, 50)  # Position for submit button
-
-        while True:  # Continue until username and mode are both set
-            screen.fill((30, 30, 30))  # Background color for the prompt
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-
-                # Handle username input
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN and username != "":  # Confirm username on Enter
-                        # Don't lock username right after pressing Enter
-                        pass
-                    elif event.key == pygame.K_BACKSPACE:  # Remove last character
-                        username = username[:-1]
-                    else:
-                        username += event.unicode  # Add typed character to username
-
-                # Handle mode selection
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if easy_box.collidepoint(event.pos):
-                        # Toggle mode if already selected
-                        if mode == "EASY":
-                            mode = ""  # Unselect mode if clicked again
-                        else:
-                            mode = "EASY"
-                    elif hard_box.collidepoint(event.pos):
-                        # Toggle mode if already selected
-                        if mode == "HARD":
-                            mode = ""  # Unselect mode if clicked again
-                        else:
-                            mode = "HARD"
-
-                # Handle submit button
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if submit_box.collidepoint(event.pos) and username != "" and mode != "":
-                        return username.upper(), mode  # Submit inputs when button is clicked
-
-            # Draw the username input box
-            pygame.draw.rect(screen, color_active if username else color_inactive, input_box, 2)
-            text_surface = font.render(username.upper(), True, color_text)
-            screen.blit(text_surface, (input_box.x + 10, input_box.y + 10))
-            input_box.w = max(400, text_surface.get_width() + 20)  # Adjust width dynamically
-
-            # Draw the mode selection buttons with highlighting
-            easy_color = color_selected if mode == "EASY" else (color_hover if easy_box.collidepoint(pygame.mouse.get_pos()) else color_inactive)
-            hard_color = color_selected if mode == "HARD" else (color_hover if hard_box.collidepoint(pygame.mouse.get_pos()) else color_inactive)
-
-            pygame.draw.rect(screen, easy_color, easy_box)
-            pygame.draw.rect(screen, hard_color, hard_box)
-
-            # Add text to each mode button
-            easy_text = font.render("Facile", True, color_text)
-            hard_text = font.render("Normale", True, color_text)
-            screen.blit(easy_text, (easy_box.x + (easy_box.width - easy_text.get_width()) // 2, easy_box.y + (easy_box.height - easy_text.get_height()) // 2))
-            screen.blit(hard_text, (hard_box.x + (hard_box.width - hard_text.get_width()) // 2, hard_box.y + (hard_box.height - hard_text.get_height()) // 2))
-
-            # Draw the submit button
-            pygame.draw.rect(screen, (100, 20, 0), submit_box)
-            submit_text = font.render("Invio", True, color_text)
-            screen.blit(submit_text, (submit_box.x + (submit_box.width - submit_text.get_width()) // 2, submit_box.y + (submit_box.height - submit_text.get_height()) // 2))
-
-            # Display prompts (titles) - These titles stay visible even after choices
-            prompt_surface = font.render("Username:", True, color_text)
-            screen.blit(prompt_surface, (200, 100))
-
-            # Always show the mode prompt
-            prompt_surface = font.render("Difficoltà:", True, color_text)
-            screen.blit(prompt_surface, (200, 270))
-
-            pygame.display.flip()
-            clock.tick(30)  # Limit frame rate
-
     def update(self):
         if not self.animation_active and self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
             current_time = pygame.time.get_ticks()
