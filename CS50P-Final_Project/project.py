@@ -19,8 +19,6 @@ class Config:
     SCREEN_HEIGHT = (CELL_NUMBER + 1) * CELL_SIZE
     BACKGROUND_COLOR = (145, 182, 63)
     FPS = 60
-    EASY_MODE_SPEED = 10  # Easy mode speed (lower number for slower movement)
-    HARD_MODE_SPEED = 5  # Hard mode speed (higher number for faster movement)
 
 class SNAKE: 
     def __init__(self):
@@ -146,12 +144,10 @@ class GAME:
         self.trophy = pygame.image.load("static/coppa.png").convert_alpha()
         
         self.last_move_time = 0  # Time when the snake last moved
-        self.move_delay = 200  # Default delay for normal mode (milliseconds)
-        
-        if self.mode == "HARD":
-            self.move_delay = 0  # Faster mode (faster movement speed)
-        elif self.mode == "EASY":
-            self.move_delay = 300  # Slower mode (slower movement speed)
+        if self.mode == "EASY":
+            self.move_delay = 300  # Slower mode 
+        else:
+            self.move_delay = 0  # Faster mode
 
         #initialize record-related attributes
         self.myRecord = self.get_myRecord()  # Fetch player's best score
@@ -182,8 +178,8 @@ class GAME:
         color_selected = pygame.Color('green')  # Color to highlight the selected mode
 
         input_box = pygame.Rect(200, 150, 400, 50)  # Position for username input box
-        easy_box = pygame.Rect(250, 400, 100, 50)  # Position for "EASY" box
-        hard_box = pygame.Rect(450, 400, 100, 50)  # Position for "HARD" box
+        easy_box = pygame.Rect(250, 320, 100, 50)  # Position for "EASY" box
+        hard_box = pygame.Rect(450, 320, 100, 50)  # Position for "HARD" box
         submit_box = pygame.Rect(350, 500, 100, 50)  # Position for submit button
 
         while True:  # Continue until username and mode are both set
@@ -238,27 +234,26 @@ class GAME:
             pygame.draw.rect(screen, hard_color, hard_box)
 
             # Add text to each mode button
-            easy_text = font.render("EASY", True, color_text)
-            hard_text = font.render("HARD", True, color_text)
+            easy_text = font.render("Facile", True, color_text)
+            hard_text = font.render("Normale", True, color_text)
             screen.blit(easy_text, (easy_box.x + (easy_box.width - easy_text.get_width()) // 2, easy_box.y + (easy_box.height - easy_text.get_height()) // 2))
             screen.blit(hard_text, (hard_box.x + (hard_box.width - hard_text.get_width()) // 2, hard_box.y + (hard_box.height - hard_text.get_height()) // 2))
 
             # Draw the submit button
-            pygame.draw.rect(screen, color_hover if submit_box.collidepoint(pygame.mouse.get_pos()) else color_inactive, submit_box)
-            submit_text = font.render("Submit", True, color_text)
+            pygame.draw.rect(screen, (100, 20, 0), submit_box)
+            submit_text = font.render("Invio", True, color_text)
             screen.blit(submit_text, (submit_box.x + (submit_box.width - submit_text.get_width()) // 2, submit_box.y + (submit_box.height - submit_text.get_height()) // 2))
 
             # Display prompts (titles) - These titles stay visible even after choices
-            prompt_surface = font.render("Enter your username and press 'Enter'", True, color_text)
+            prompt_surface = font.render("Username:", True, color_text)
             screen.blit(prompt_surface, (200, 100))
 
             # Always show the mode prompt
-            prompt_surface = font.render("Choose Mode: Click 'EASY' or 'HARD'", True, color_text)
-            screen.blit(prompt_surface, (200, 330))
+            prompt_surface = font.render("Difficoltà:", True, color_text)
+            screen.blit(prompt_surface, (200, 270))
 
             pygame.display.flip()
             clock.tick(30)  # Limit frame rate
-
 
     def update(self):
         if not self.animation_active and self.snake.direction != Vector2(0, 0):  # Only update if the snake is moving
@@ -482,13 +477,9 @@ def main():
 
     game = GAME()
 
-    # Variable to track the time of the last input
-    last_input_time = 0
-    input_delay = 80  # 80 milliseconds delay between key presses
-
     #game loop con quit option, screen_update e keybindings. background and draw elements
+    input_queue = []  # Holds valid directions
     while True:
-
         current_time = pygame.time.get_ticks()  # Get current time in milliseconds
 
         for event in pygame.event.get():
@@ -500,22 +491,25 @@ def main():
                 if event.button == 1:  # Left mouse button
                     if game.trophy_button_rect.collidepoint(event.pos):
                         game.show_hall_of_fame()
-    
-            if event.type == SCREEN_UPDATE:
-                game.update()
 
             if event.type == pygame.KEYDOWN:
-                if current_time - last_input_time >= input_delay: # Only process input if enough time has passed since the last key press
-                    if event.key == pygame.K_UP and game.snake.direction.y != 1: 
-                        game.snake.direction = Vector2(0,-1) 
-                    elif event.key == pygame.K_DOWN and game.snake.direction.y != -1: 
-                        game.snake.direction = Vector2(0,1)
-                    elif event.key == pygame.K_LEFT and game.snake.direction.x != 1 and game.snake.direction != Vector2(0, 0):  # Can't move left if already moving right or if no direction
-                        game.snake.direction = Vector2(-1, 0)
-                    elif event.key == pygame.K_RIGHT and game.snake.direction.x != -1: 
-                        game.snake.direction = Vector2(1,0)
-                    # Update the last input time after processing the key press
-                    last_input_time = current_time
+                # Add valid directions to the input queue
+                if event.key == pygame.K_UP and game.snake.direction.y != 1:
+                    input_queue.append(Vector2(0, -1))
+                elif event.key == pygame.K_DOWN and game.snake.direction.y != -1:
+                    input_queue.append(Vector2(0, 1))
+                elif event.key == pygame.K_LEFT and game.snake.direction.x != 1 and game.snake.direction != Vector2(0, 0):
+                    input_queue.append(Vector2(-1, 0))
+                elif event.key == pygame.K_RIGHT and game.snake.direction.x != -1:
+                    input_queue.append(Vector2(1, 0))
+
+            if event.type == SCREEN_UPDATE:
+                if input_queue:
+                    next_direction = input_queue.pop(0)  # Get the next direction from the buffer
+                    # Prevent reversing direction
+                    if next_direction.x != -game.snake.direction.x or next_direction.y != -game.snake.direction.y:
+                        game.snake.direction = next_direction
+                game.update()
 
         screen.fill(Config.BACKGROUND_COLOR) 
         game.draw_elements()
