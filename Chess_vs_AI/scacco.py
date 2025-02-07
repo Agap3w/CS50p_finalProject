@@ -1,11 +1,9 @@
 # TO DO:
-# aggiungo GUI:
-## 1. schermata introduttiva
-## 2. promo choice
-## 3. game over 
+# aggiungo promo choice
 
 # MINOR:
 # aggiungere pulsante per arrendersi / chiedere la patta
+# sistemo grafica intro e outro
 
 # VERY MINOR:
 # customizzo grafica pezzi
@@ -27,33 +25,50 @@ class ChessGame:
         self.running = True
         self.gui.init_game()
         self.clock = pygame.time.Clock()  # Initialize the clock
+        self.game_state = "intro"
 
-    def main_game_loop(self):
-        #self.gui.intro_screen()  # Display the intro screen, if any
-        
+    def main_game_loop(self):        
         while self.running:
-            # Update the screen and process events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-
+                
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    move_info = self.game_logic.process_click(event.pos)
-                    if move_info["move"]:       
-                        self.sound_manager.play_move_sounds(move_info["move"], move_info["captured_piece"], move_info["is_check"])
-                        self.gui.redraw_needed = True
+                    if self.game_state == "intro":
+                        play_button = self.gui.get_play_button_rect()
+                        if play_button.collidepoint(event.pos):
+                            self.game_state = "playing"
+                            self.gui.redraw_needed = True
+
+                    elif self.game_state == "playing":
+                        move_info = self.game_logic.process_click(event.pos)
+                        if move_info["move"]:       
+                            self.sound_manager.play_move_sounds(move_info["move"], move_info["captured_piece"], move_info["is_check"])
+                            self.gui.redraw_needed = True
+                        if self.game_logic.is_game_over():
+                            self.game_state = "outro"
+                            self.gui.redraw_needed = True
+                    
+                    elif self.game_state == "outro":
+                        retry_button = self.gui.get_retry_button_rect()
+                        if retry_button.collidepoint(event.pos):
+                            self.game_state = "intro"
+                            self.game_logic = GameLogic()  # Reset game
+                            self.gui.redraw_needed = True
 
             # Update the GUI (draw the board, pieces, selected square)
             if self.gui.redraw_needed:
-                self.gui.draw_board()  # Draw the chessboard
-                self.gui.draw_selected_square(self.game_logic.selected_square)
-                self.gui.draw_pieces(self.game_logic.board)  # Draw the pieces on the board
+                if self.game_state == "intro":
+                    self.gui.draw_intro()
+                elif self.game_state == "playing":
+                    self.gui.draw_board()
+                    self.gui.draw_selected_square(self.game_logic.selected_square)
+                    self.gui.draw_pieces(self.game_logic.board)
+                elif self.game_state == "outro":
+                    self.gui.draw_outro()
+                
                 self.gui.refresh_display()  # Update the display
                 self.gui.redraw_needed = False  
-
-            # Check if the game is over and show the game-over screen
-            if self.game_logic.is_game_over():
-                self.running = False
 
             # Keep the game running at the correct frame rate
             self.clock.tick(FPS)
@@ -62,7 +77,9 @@ class GUI:
     def __init__(self):
         self.screen = None
         self.font = None
-        self.redraw_needed = False
+        self.redraw_needed = True
+        self.play_button_rect = None
+        self.retry_button_rect = None
     
     def init_game(self):
         pygame.init()
@@ -79,9 +96,36 @@ class GUI:
                 self.font = pygame.font.Font(None, 60)  # Fallback
         
         # Draw initial board
-        self.draw_board()
-        self.draw_pieces()
+        self.draw_intro()
         self.refresh_display()
+
+    def get_play_button_rect(self):
+        return pygame.Rect(WIDTH // 2 - 50, HEIGHT // 2 + 50, 100, 50)
+    
+    def get_retry_button_rect(self):
+        return pygame.Rect(WIDTH // 2 - 50, HEIGHT // 2 + 50, 100, 50)
+
+    def draw_intro(self):
+        self.screen.fill((0, 0, 0))
+        text = self.font.render("Welcome to Chess", True, (255, 255, 255))
+        self.screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2))
+        
+        play_button = self.get_play_button_rect()
+        pygame.draw.rect(self.screen, (0, 255, 0), play_button)
+        button_text = self.font.render("Play", True, (255, 255, 255))
+        self.screen.blit(button_text, (play_button.x + (play_button.width - button_text.get_width()) // 2, 
+                                     play_button.y + (play_button.height - button_text.get_height()) // 2))
+
+    def draw_outro(self):
+        self.screen.fill((0, 0, 0))
+        text = self.font.render("Game Over", True, (255, 0, 0))
+        self.screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2))
+        
+        retry_button = self.get_retry_button_rect()
+        pygame.draw.rect(self.screen, (0, 255, 0), retry_button)
+        button_text = self.font.render("Retry", True, (255, 255, 255))
+        self.screen.blit(button_text, (retry_button.x + (retry_button.width - button_text.get_width()) // 2,
+                                     retry_button.y + (retry_button.height - button_text.get_height()) // 2))
 
     def refresh_display(self):
         pygame.display.flip()
@@ -116,7 +160,7 @@ class GUI:
                 text_rect = text.get_rect(center=(col * SQUARE_SIZE + SQUARE_SIZE // 2, 
                                                   (7 - row) * SQUARE_SIZE + SQUARE_SIZE // 2))
                 self.screen.blit(text, text_rect)
-
+    
 class SoundManager:
     def __init__(self):
         pygame.mixer.init()
