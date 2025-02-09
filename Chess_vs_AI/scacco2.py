@@ -179,11 +179,16 @@ class GUI:
         for square in chess.SQUARES:
             piece = board.piece_at(square)  # Get the piece at the given square
             if piece:  # If the piece exists
+                piece_symbol = UNICODE_PIECES[piece.symbol()]  # Get the correct symbol for the piece
                 col = chess.square_file(square)
                 row = chess.square_rank(square)
                 
                 # Set the piece's color and render it on the screen
-                self.render_pieces(UNICODE_PIECES[piece.symbol()], piece.color, col * SQUARE_SIZE + SQUARE_SIZE // 2, (7 - row) * SQUARE_SIZE + SQUARE_SIZE // 2)
+                color = (255, 255, 255) if piece.color else (0, 0, 0)
+                text = self.font.render(piece_symbol, True, color)
+                text_rect = text.get_rect(center=(col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                                                  (7 - row) * SQUARE_SIZE + SQUARE_SIZE // 2))
+                self.screen.blit(text, text_rect)
 
     def draw_promotion_menu(self, square, is_white):
         """Draw the promotion piece selection menu."""
@@ -225,12 +230,10 @@ class GUI:
         pygame.draw.rect(self.screen, (200, 200, 200) if y % (2 * SQUARE_SIZE) == 0 else (180, 180, 180), piece_rect)
         
         # Draw piece
-        self.render_pieces(UNICODE_PIECES[piece], is_white, x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2)
-
-    def render_pieces(self, piece, color_condition, x, y):
-        color = (255, 255, 255) if color_condition else (0, 0, 0)
-        text = self.font.render(piece, True, color)
-        text_rect = text.get_rect(center=(x,y))
+        piece_symbol = UNICODE_PIECES[piece]
+        color = (255, 255, 255) if is_white else (0, 0, 0)
+        text = self.font.render(piece_symbol, True, color)
+        text_rect = text.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
         self.screen.blit(text, text_rect)
 
 class SoundManager:

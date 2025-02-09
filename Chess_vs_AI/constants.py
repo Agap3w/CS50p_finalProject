@@ -10,3 +10,5 @@ UNICODE_PIECES = {
     'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',
     'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟'
 }
+
+FONT = ['segoe ui symbol', 'arial unicode ms']
